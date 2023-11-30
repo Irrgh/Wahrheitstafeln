@@ -142,7 +142,7 @@ update msg model =
             in
             (Debug.log "assignment" {model | assignments = newAssignments}, Cmd.none)
         Resize width height ->
-            ({ model | viewportWidth = width, viewportHeight = height }, Cmd.none)
+            ({ model | viewportWidth = width, viewportHeight = height}, Cmd.none)
         
 
 
@@ -190,23 +190,43 @@ view model =
 
       
     in
-    div [HtmlAtt.class "container-fluid container-main" ]
+    div [HtmlAtt.class "container-fluid" ]
         [css "https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css",
         css "style.css",
+        h1 [] [Html.text "Boolean Formulas Programming Project"],
         
-        div [HtmlAtt.class "row"] [
+        div [HtmlAtt.class "row h-12"] [
             div [HtmlAtt.class "col-sm-6"] [
-                textarea [Event.onInput InputChanged] [],
-                pre [] [Html.text (Debug.toString model.parseTrees)],
-                pre [] [Html.text (Debug.toString model.parseResult)],
-                div [HtmlAtt.class "container-fluid"] [
-                    model.truthTable
+                p [] [
+                    label [] [Html.text "inverse polish"],
+                    input [HtmlAtt.type_ "radio", HtmlAtt.name "parseMode"] [],
+                    label [] [Html.text "infix"],
+                    input [HtmlAtt.type_ "radio", HtmlAtt.name "parseMode"] [],
+
+                    textarea [Event.onInput InputChanged, HtmlAtt.placeholder "Input Boolean Formular here:" ] []
+                ],
+                p [] [
+                    h3 [] [Html.text "Raw Parsing Results:"],
+                    pre [] [Html.text (Debug.toString model.parseResult)]
+                ],
+
+
+                p [] [
+                    h3 [] [Html.text "Parsed Boolean Formulars:"],
+                    pre [] [Html.text (Debug.toString model.parseTrees)]
+                ],
+                p [] [
+                    h3 [] [Html.text "Generated Truthtable:"],
+                    div [HtmlAtt.class "table-container"] [
+                        model.truthTable
+                    ]
                 ]
+                
                 
             ]
             ,
             div [HtmlAtt.class "col-sm-6"] [
-                div [HtmlAtt.class "border border-2 border-primary p-2 mb-2"] [
+                div [HtmlAtt.style "border" "solid black 1pt" ] [
                 ZoomSvg.view
                     model.drawCanvas
                     []

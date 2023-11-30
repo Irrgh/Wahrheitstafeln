@@ -1,8 +1,11 @@
-module DummyStudents exposing (evalBooleanFormula, parseBooleanFormula, computeTruthTable)
+module DummyStudents exposing (evalBooleanFormula, parseBooleanFormula, computeTruthTable, name)
 
 import Types exposing (..)
 import Dict exposing (..)
 
+
+
+name = "Max Musterman"
 
 
 
