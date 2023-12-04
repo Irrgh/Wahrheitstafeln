@@ -1,12 +1,17 @@
 module Types exposing (..)
 
 
-type BooleanFormula
+type StackElement
+    = Formula Formula
+    | Token BoolToken
+
+
+type Formula
     = Const Bool
     | Var String
-    | And BooleanFormula BooleanFormula
-    | Or BooleanFormula BooleanFormula
-    | Not BooleanFormula
+    | And Formula Formula
+    | Or Formula Formula
+    | Not Formula
 
 
 type BoolToken
@@ -17,10 +22,6 @@ type BoolToken
     | NOT
     | OPEN
     | CLOSE
-
-
-
--- example encoding 'x3 || True' in reverse Polish notation
 
 
 example : List BoolToken

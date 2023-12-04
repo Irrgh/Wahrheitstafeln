@@ -1,26 +1,60 @@
 module Schellenberger exposing (..)
 
 import Html exposing (Html)
-import Svg exposing (Svg)
 import Types exposing (..)
-import ParseTree exposing (..)
-import BooleanLexer exposing (lex)
 import Html.Attributes
-import Svg.Attributes
-import Html.Events
+import BooleanFormulas exposing (toString)
+
+
+
+{--
+    Inverse Polish Parser with ()
+--}
+parse : List BoolToken -> Result (List StackElement) Formula
+parse list =
+    let
+        parseResult : List StackElement
+        parseResult =
+            List.foldl parseStep [] list
+    in
+    case parseResult of
+        [ Formula f ] ->
+            Result.Ok f
+
+        _ ->
+            Result.Err parseResult
+
+
+
+parseStep : BoolToken -> List StackElement -> List StackElement
+parseStep token stack =
+    case ( token, stack ) of
+        ( CLOSE, (Token AND) :: (Formula f2) :: (Formula f1) :: (Token OPEN) :: restStack ) ->
+            Formula (And f1 f2) :: restStack
+
+        ( CLOSE, (Token OR) :: (Formula f2) :: (Formula f1) :: (Token OPEN) :: restStack ) ->
+            Formula (Or f1 f2) :: restStack
+
+        ( CLOSE, (Token NOT) :: (Formula f) :: (Token OPEN) :: restStack ) ->
+            Formula (Not f) :: restStack
+
+        ( CONST value, _ ) ->
+            Formula (Const value) :: stack
+
+        ( VAR name, _ ) ->
+            Formula (Var name) :: stack
+
+        ( _, _ ) ->
+            Token token :: stack
 
 
 
 
 
 
-booleanFormulaLexer : String -> List BoolToken
-booleanFormulaLexer inputString =
-    lex inputString
 
 
-
-boolTreeToString : BooleanFormula -> String
+boolTreeToString : Formula -> String
 boolTreeToString tree =
     case tree of
         And _ _ ->
@@ -35,34 +69,67 @@ boolTreeToString tree =
             var
 
 
-
-
-
-
-
-
+{--
+    Takes the first elements from parsing result
+--}
+extractResult : Result (List StackElement) Formula -> Formula
+extractResult res =
+    let 
+    
+        filter : StackElement -> Maybe Formula
+        filter stack =
+            case stack of
+                Formula form ->
+                    Just form
+                _ ->
+                    Nothing
+    
+    in
+    case res of
+            Err stack ->
+                case List.filterMap (filter) stack of
+                    [] ->
+                        Var "Smth went wrong while parsing"
+                    a :: _ ->
+                        a
+            Ok formula ->
+                formula
 
 {--
-    da können Sie zum Beispiel als Funktion 'computeSvgAttributes' eine Funktion übergeben, die jedem Blatt 
-    per Svg.Events.onClick einen Eventhandler anfügt, bei inneren Knoten die Attributliste aber leerlässt.  
-
-
-    Wahrscheinlich müssen Sie noch allerhand Zusatzinfo übergeben, zum Beispiel das Rechteck auf dem Svg-Bereich, 
-        wo der Baum hingezeichnet werden soll und dann noch einen Skalierfaktor etc. 
+    Takes all partial Formulas from parsing result
 --}
---- den Truth Table in einen Html table umwandeln
+extractStack : Result (List StackElement) Formula -> List Formula
+extractStack res =
+    let
+        filter : StackElement -> Maybe Formula
+        filter stack =
+            case stack of
+                Formula form ->
+                    Just form
+                Token _ ->
+                    Nothing
+    in
+    case res of
+        Err stack ->
+            let 
+                
+                filtered = List.filterMap (filter) stack
+                
+            in
+            case filtered of
+                [] ->
+                    [Var "Smth went wrong while parsing"]
+                _ :: _ ->
+                    filtered     
+        Ok formula ->
+                [formula]
+            
 
 
-extractResult : (List BooleanFormula, Maybe String) -> BooleanFormula
-extractResult (tree, _) =
-    case tree of
-        [] ->
-            Var "Smth went wrong / why the heck is the formular empty??"
-        a :: rest ->
-            if List.length tree > 1 then
-                extractResult (rest, Nothing)
-            else
-                a 
+
+
+
+
 
 
 
@@ -78,63 +145,48 @@ boolToString b =
 
 
 
-viewTruthTable : (Bool -> String) -> ( List String, List ( List Bool, Bool ) ) -> (Html msg)
-viewTruthTable boolRender (vars, truthTable) =
+
+
+
+viewTruthTable : List ( List ( String, Bool ), Formula ) -> (Html msg)
+viewTruthTable table =
     let
 
-        
-        
-        genRow : (List String) -> Html msg
-        genRow list =
-            Html.tr [] (List.map (\f-> Html.td [] [Html.text f]) list)
+
+        inputOfRow : (List (String,Bool), Formula) -> List (String, Bool)
+        inputOfRow (input, _) =
+            input 
 
 
-        makeStringList : (List Bool, Bool) -> List (String)
-        makeStringList (list, res) =
-            (List.map (boolRender) (list ++ [res]))
+        heading : List (String, Bool) -> Html msg
+        heading input =
+            Html.tr [] ((List.map (\f -> Html.th [] [Html.text (Tuple.first f)]) input) ++ [Html.th [] [Html.text "Result"]])
+
+
+        rowToHtml : (List (String,Bool), Formula) -> Html msg
+        rowToHtml (input, res) =
+            case input of
+                [] ->
+                    Html.tr [] [Html.div [] [Html.text "All variables are disabled (Probably)"]]
+                _ ->
+                    let
+
+                        permutation : List (Bool)
+                        permutation = List.map (Tuple.second) input
+                    in
+                    Html.tr [] ((List.map (\f -> Html.td [] [Html.text (boolToString f)]) permutation) ++ [Html.td [] [Html.text (toString res)]])
 
 
     in
-    Html.table [Html.Attributes.class "table table-striped overflow-y-scroll"]
-        [Html.thead [] 
-            (List.map (\f-> Html.th [] [Html.text f]) (vars ++ ["Result:"]))
-        ,Html.tbody [] (List.map (genRow) (List.map (makeStringList) truthTable))
-        ]
-    
-
-
-
-{--
- Ein Wörtchen zur Repräsentierung des Truth Tables. 
-
- Zuerst würde man ja meinen, ein Truth Table sei als Typ eine 
-
-    List (Assignment, Bool)
-
-  und ein 'Assignment' sei einfach 
-    
-   (String -> Bool)
-
-  Daher wäre ein Truth Table insgesamt eine 
-
-     List ( (String -> Bool), Bool)
-
-
-  Das Problem entsteht jetzt, wenn Sie zwei Wahrheitstabellen vergleichen. 
-  Ein schmutziges Geheimnis von Elm ist nämlich, dass Funktionen doch nicht 
-  zu 100% sich wie normale Werte verhalten. Sie können sie nämlich nicht vergleichen. 
-  Probieren Sie's aus:
-
-> f = (\s -> s == "hello")
-> g = (\s -> s == String.toLower "HeLLo")
-> f == g 
- !@#$#@@#$%$%^&*&*()(*())(*&^%^$%@##!@#@#$%$#@#$%^$#$%)
-
-
-
-
- ]
-
-
-
---}
+    case table of
+        [] ->
+            Html.text "table has no rows"
+        a :: _ ->
+            Html.table [Html.Attributes.class "table table-striped"] [
+                Html.thead [] [
+                    heading (inputOfRow a)
+                ],
+                Html.tbody [] 
+                    (List.map (rowToHtml) table)
+            ]
+        

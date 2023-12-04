@@ -1,18 +1,18 @@
-module BooleanLexer exposing (..)
-import MealyMachine as Mealy exposing (..)
+module BooleanLexer exposing (lex)
+import BetterMealy as Mealy exposing (..)
 import Types exposing (..)
 
 
 type State 
-    = S
-    | V
-    | O
+    = V
     
 
 
 type Output
     = Val
-    | In   
+    | Not 
+    | And
+    | Or
     | Op   -- [
     | Cl   -- ] 
     | Ign  -- Ignores whitespace and \n , \r
@@ -22,12 +22,12 @@ type Output
 
 
 
-machine: Mealy State Output
+machine: BetterMealy State Output
 machine =
     {
-    startState = S,
+    startState = V,
     transition = transition,
-    acceptingStates = [S]
+    acceptingStates = [V]
     }
 
 
@@ -42,15 +42,12 @@ toToken (val, out) =
                 Just (CONST False)
             else 
                 Just (VAR val)
-        In ->
-            if (val == "||") then
-                Just (OR)
-            else if (val == "&&") then
-                Just (AND)
-            else if (val == "!") then
-                Just (NOT)
-            else
-                Nothing
+        Not ->
+            Just NOT
+        Or ->
+            Just OR
+        And ->
+            Just AND
         Op ->
             Just OPEN
         Cl ->
@@ -59,18 +56,26 @@ toToken (val, out) =
             Nothing
 
 
-bracketFix : List (String, Output) -> List (String, Output)
-bracketFix list =
+repeationFix : List (String, Output) -> List (String, Output)
+repeationFix list =
     let
         helper : (String, Output) -> List (String, Output) -> List (String, Output)
         helper (str, token) ls =
             case token of
-                Op ->
-                    ls ++ List.repeat (String.length str) (str,token) 
-                Cl ->
-                    ls ++ List.repeat (String.length str) (str,token) 
-                _ ->
+                Val ->
                     ls ++ [(str, token)]
+                Ign -> 
+                    ls ++ [(str,token)]
+                Op ->
+                    ls ++ List.repeat (String.length str) ("(",token)
+                Cl ->
+                    ls ++ List.repeat (String.length str) (")",token)
+                Not -> 
+                    ls ++ List.repeat (String.length str) ("!",token)
+                And -> 
+                    ls ++ List.repeat (String.length str) ("&",token)
+                Or -> 
+                    ls ++ List.repeat (String.length str) ("|",token)  
     in
     List.foldl (helper) [] list
 
@@ -79,7 +84,7 @@ bracketFix list =
 
 lex : String -> List (BoolToken)
 lex str =
-    List.filterMap (toToken) (bracketFix (Mealy.parseAndMerge machine str))
+    List.filterMap (toToken) (repeationFix (Mealy.parse machine str))
 
 
 
@@ -89,56 +94,22 @@ lex str =
 transition : State -> Char -> (State, Output)
 transition state char =
     case (state, char) of 
-        (S, ' ') ->
-            (S, Ign)
-        (S, '\n') ->
-            (S, Ign)
-        (S, '\r') ->
-            (S, Ign)
-        (S, '|') ->
-            (O, In)
-        (S, '&') ->
-            (O, In)
-        (S, '!') ->
-            (O, In)
-        (S, '(') ->
-            (S, Op)
-        (S, ')') ->
-            (S, Cl)
-        (S, _) ->
-            (V, Val)
-        (O, '&') ->
-            (S, In)
-        (O, '|') ->
-            (S, In)
-        (O, ' ') ->
-            (S, Ign)
-        (O, '\n') ->
-            (S, Ign)
-        (O, '\r') ->
-            (S, Ign)
-        (O, '(') ->
-            (S, Op)
-        (O, ')') ->
-            (S, Op)
-        (O, _) ->
-            (V, Val)
         (V, ' ') ->
-            (S, Ign)
+            (V, Ign)
         (V, '\n') ->
-            (S, Ign)
+            (V, Ign)
         (V, '\r') ->
-            (S, Ign)
+            (V, Ign)
         (V, '!') ->
-            (S, In)
+            (V, Not)
         (V, '|') ->
-            (O, In)
+            (V, Or)
         (V, '&') -> 
-            (O, In)
+            (V, And)
         (V, '(') ->
-            (S, Op)
+            (V, Op)
         (V, ')') ->
-            (S, Cl)
+            (V, Cl)
         (V, _) ->
             (V, Val)
         

@@ -6,8 +6,6 @@ import Browser.Dom exposing (..)
 import Html exposing (..)
 import Html.Attributes as HtmlAtt exposing (..)
 import Html.Events as Event exposing (..)
-import ParseTree exposing (ParseTree(..))
-import Students as Students exposing (..)
 import Schellenberger exposing (..)
 import ZoomSvg exposing (..)
 import Svg.Attributes as SvgAtt exposing (..)
@@ -15,6 +13,13 @@ import Svg as Svg exposing (..)
 import Dict exposing (..)
 import SvgAuxiliary exposing (viewboxLeft, viewboxTop, viewboxWidth, viewboxHeight)
 import Browser.Events
+import BooleanFormulaParser as BooleanFormulaParser exposing (..)
+import BooleanLexer exposing (lex)
+import Assignments as Assignments exposing (..)
+import TruthTable  as TruthTable exposing (..)
+import BooleanFormulas as BooleanFormulas exposing (..)
+
+
 
 
 
@@ -32,21 +37,23 @@ import Browser.Events
 type Msg 
     = InputChanged String
     | DrawCanvasMessage ZoomSvg.Message
-    | ValueToggle String
+    | ValueCycle String
     | Resize Float Float
+    | ParserChange (List BoolToken -> Result (List StackElement) Formula)
 
 
 
 type alias Model =
     { 
     inputStr : String,
-    parseResult : (List BooleanFormula, Maybe String),
-    parseTrees : List (BooleanFormula),
+    parseResult : Result (List StackElement) Formula,
+    parseTrees : List (Formula),
     truthTable : Html Msg,
     drawCanvas : ZoomSvg Msg,
-    assignments : Dict String Bool,
+    assignments : Dict String Assignment,
     viewportWidth : Float,
-    viewportHeight : Float
+    viewportHeight : Float,
+    parser : List BoolToken -> Result (List StackElement) Formula
     }
 
 
@@ -55,13 +62,27 @@ type alias Position =
     , y : Float
     }
 
+type Assignment 
+    = T
+    | F
+    | D
 
 
-recordMessage : Msg -> Bool
-recordMessage message =
-    case message of
-        _ ->
-            False
+
+
+infixParser : List BoolToken -> Result (List StackElement) Formula
+infixParser tokens =
+    BooleanFormulaParser.parse tokens
+
+
+inversePolishParser : List BoolToken -> Result (List StackElement) Formula
+inversePolishParser tokens= 
+    Schellenberger.parse tokens
+
+
+
+
+
 
 
 
@@ -84,13 +105,14 @@ init : () -> ( Model, Cmd Msg )
 init _ =
     ({
     inputStr = "",
-    parseResult = ([], Nothing),
+    parseResult = Result.Err [],
     parseTrees = [],
     truthTable = Html.text "no table generated yet :(",
     drawCanvas = ZoomSvg.makeZoomableSvgCanvas DrawCanvasMessage viewboxLeft viewboxTop viewboxWidth viewboxHeight viewboxWidth viewboxHeight,
     assignments = Dict.empty,
     viewportWidth = 0,
-    viewportHeight = 0
+    viewportHeight = 0,
+    parser = BooleanFormulaParser.parse
     }
     , Cmd.none
     )
@@ -101,49 +123,107 @@ update msg model =
     case msg of
         InputChanged str ->
             let 
-                res : (List (BooleanFormula), Maybe String)
-                res = parseBooleanFormula (booleanFormulaLexer str) []
+                res : Result (List StackElement) Formula
+                res = model.parser (lex str)
             
-                extracted : BooleanFormula
+                extracted : Formula
                 extracted = extractResult res
 
-                help : (List (BooleanFormula), Maybe String) -> List (BooleanFormula)
-                help (trees, _) =
-                    trees
+                mapHelp : (String, Assignment) -> Maybe String
+                mapHelp (s, ass) =
+                    case ass of
+                        D ->
+                            Nothing
+                        _ ->
+                            Just s
 
+                varList : List String
+                varList = List.filterMap (mapHelp) (Dict.toList model.assignments)
 
                 table : Html Msg
-                table = (viewTruthTable boolToString (computeTruthTable extracted))
+                table = (viewTruthTable (TruthTable.generateTruthTable varList extracted ))
 
 
             in
-            ({model | inputStr = str ,parseResult = res, parseTrees = help res, truthTable = table}, Cmd.none)
+            ({model | inputStr = str ,parseResult = res, parseTrees = extractStack res, truthTable = table}, Cmd.none)
         DrawCanvasMessage childMessage ->
             ( { model | drawCanvas = ZoomSvg.update childMessage model.drawCanvas }, Cmd.none)
-        ValueToggle str ->
+        ValueCycle str ->
             let
 
-                maybeInvert : Maybe Bool -> Maybe Bool
-                maybeInvert maybe =
+                maybeCycle : Maybe Assignment -> Maybe Assignment
+                maybeCycle maybe =
                     case maybe of
-                        Just a ->
-                            Just (not a)
+                        Just T ->
+                            Just F
+                        Just F ->
+                            Just D
+                        Just D ->
+                            Just T
                         _ ->
                             Nothing
 
 
-                newAssignments : Dict String Bool
+                newAssignments : Dict String Assignment
                 newAssignments = 
                     if Dict.member str model.assignments then
-                        Dict.update str (maybeInvert) model.assignments
+                        Dict.update str (maybeCycle) model.assignments
                     else
-                        Dict.insert str True model.assignments
+                        Dict.insert str T model.assignments
+
+
+                mapHelp : (String, Assignment) -> Maybe String
+                mapHelp (s, ass) =
+                    case ass of
+                        D ->
+                            Nothing
+                        _ ->
+                            Just s
+
+                varList : List String
+                varList = List.filterMap (mapHelp) (Dict.toList newAssignments)
+
+
+                table : Html Msg
+                table = (viewTruthTable (TruthTable.generateTruthTable varList (extractResult model.parseResult) ))
 
             in
-            (Debug.log "assignment" {model | assignments = newAssignments}, Cmd.none)
+            ({model | assignments = newAssignments , truthTable = table}, Cmd.none)
         Resize width height ->
             ({ model | viewportWidth = width, viewportHeight = height}, Cmd.none)
+        ParserChange newParser ->
+            let 
+    
+                res : Result (List StackElement) Formula
+                res = newParser (lex model.inputStr)
+            
+                extracted : Formula
+                extracted = extractResult res
+
+                mapHelp : (String, Assignment) -> Maybe String
+                mapHelp (s, ass) =
+                    case ass of
+                        D ->
+                            Nothing
+                        _ ->
+                            Just s
+
+                varList : List String
+                varList = List.filterMap (mapHelp) (Dict.toList model.assignments)
+
+                table : Html Msg
+                table = (viewTruthTable (TruthTable.generateTruthTable varList extracted ))  
+            
+            in
+            
+            
+            ({model | parser = newParser , parseTrees = extractStack res, parseResult = res, truthTable = table}, Cmd.none)
         
+
+
+
+
+
 
 
 css path =
@@ -199,9 +279,9 @@ view model =
             div [HtmlAtt.class "col-sm-6"] [
                 p [] [
                     label [] [Html.text "inverse polish"],
-                    input [HtmlAtt.type_ "radio", HtmlAtt.name "parseMode"] [],
+                    input [HtmlAtt.type_ "radio", HtmlAtt.name "parseMode", onClick (ParserChange inversePolishParser)] [],
                     label [] [Html.text "infix"],
-                    input [HtmlAtt.type_ "radio", HtmlAtt.name "parseMode"] [],
+                    input [HtmlAtt.type_ "radio", HtmlAtt.name "parseMode", onClick (ParserChange infixParser)] [],
 
                     textarea [Event.onInput InputChanged, HtmlAtt.placeholder "Input Boolean Formular here:" ] []
                 ],
@@ -226,7 +306,7 @@ view model =
             ]
             ,
             div [HtmlAtt.class "col-sm-6"] [
-                div [HtmlAtt.style "border" "solid black 1pt" ] [
+                div [HtmlAtt.style "border" "solid black 1pt"] [
                 ZoomSvg.view
                     model.drawCanvas
                     []
@@ -246,48 +326,115 @@ view model =
 
 
 -- depth should start at 
-treeToSvg : ZoomSvg Msg ->Dict String Bool -> Float -> Position -> BooleanFormula -> List (Svg Msg)
+treeToSvg : ZoomSvg Msg ->Dict String Assignment -> Float -> Position -> Formula -> List (Svg Msg)
 treeToSvg canvas assigned width rootPos tree =
     let
 
-        resultToColor: Bool -> String
+        resultToColor: Formula -> String
         resultToColor res =
-            if res then
-                "green"
-            else
-                "red"
+            case res of
+                Const b ->
+                    if b then
+                        "green"
+                    else
+                        "red"
+                _ ->
+                    "grey"
 
-        drawNode : Position -> String -> Bool -> Bool -> List (Svg (Msg))
-        drawNode pos str res events =    
-            [
-            Svg.circle [
-                r  (String.fromFloat (10.0 * canvas.zoom)),
-                cx (String.fromFloat pos.x),
-                cy (String.fromFloat pos.y),
+
+        properAssignment : Dict String Bool
+        properAssignment =
+            let
+                filter k v = 
+                    case v of
+                        D ->
+                            False
+                        _ ->
+                            True
+                        
+                map k v =
+                    case v of
+                        T ->
+                            True
+                        _ ->
+                            False
+
+
+            in
+            Dict.map (map) (Dict.filter (filter) assigned)
+
+
+        line : Position -> Position -> (Svg Msg)
+        line root child =
+            Svg.line [
+                x1 (String.fromFloat root.x),
+                y1 (String.fromFloat root.y),
+                x2 (String.fromFloat child.x),
+                y2 (String.fromFloat child.y),
                 stroke "black",
-                SvgAtt.strokeWidth (String.fromFloat (1.5 * canvas.zoom)),
-                fill (resultToColor res),
-                onClick (ValueToggle str)
-            ] [],
+                SvgAtt.strokeWidth (String.fromFloat (1.5 * canvas.zoom))
+            ] []
+                
+
+
+
+        drawNode : Position -> String -> Formula -> Bool -> List (Svg (Msg))
+        drawNode pos str res events =    
+            let
+            
+                
+                circleAttributes event =
+                    if event then
+                        [
+                        r  (String.fromFloat (10.0 * canvas.zoom)),
+                        cx (String.fromFloat pos.x),
+                        cy (String.fromFloat pos.y),
+                        stroke "black",
+                        SvgAtt.strokeWidth (String.fromFloat (1.5 * canvas.zoom)),
+                        fill (resultToColor res),
+                        onClick (ValueCycle str)
+                        ]
+                    else
+                        [
+                        r  (String.fromFloat (10.0 * canvas.zoom)),
+                        cx (String.fromFloat pos.x),
+                        cy (String.fromFloat pos.y),
+                        stroke "black",
+                        SvgAtt.strokeWidth (String.fromFloat (1.5 * canvas.zoom)),
+                        fill (resultToColor res)
+                        ]
+            
+            in
+            
+            
+            
+            
+            [
+            Svg.circle (circleAttributes events) [],
             Svg.line [
                 
 
 
             ] [],
             Svg.text_ [
-                x (String.fromFloat pos.x),
+                x (String.fromFloat (pos.x + (10.0 * canvas.zoom))),
                 y (String.fromFloat (pos.y - (20.0 * canvas.zoom))),
                 fontSize (String.fromFloat (18.0 * canvas.zoom)),
-                textAnchor "middle"
+                textAnchor "middle",
+                stroke "rgb(107, 196, 255)",
+                fill "rgb(107, 196, 255)"
                 
 
             ] [Svg.text str]
              ]
 
+        
+
+
 
         withEvents : Bool -> List (Svg Msg)
         withEvents event =
-            drawNode rootPos (boolTreeToString tree) (Students.evalBooleanFormula assigned tree) event
+            drawNode rootPos (boolTreeToString tree) (BooleanFormulas.evaluate tree properAssignment) event
 
     in 
     case tree of
@@ -298,7 +445,7 @@ treeToSvg canvas assigned width rootPos tree =
 
                 newWidth = width / toFloat 2
             in
-            List.concat (List.append [(withEvents False)] (List.map2 (treeToSvg canvas assigned newWidth) newRoots [child1,child2]))
+            List.concat (List.append [(List.map (line rootPos) newRoots) ++ (withEvents False)] (List.map2 (treeToSvg canvas assigned newWidth) newRoots [child1,child2]))
         Or child1 child2 ->
             let
                 newRoots : List Position
@@ -306,15 +453,17 @@ treeToSvg canvas assigned width rootPos tree =
 
                 newWidth = width / toFloat 2
             in
-            List.concat (List.append [(withEvents False)] (List.map2 (treeToSvg canvas assigned newWidth) newRoots [child1,child2]))
+            List.concat (List.append [(List.map (line rootPos) newRoots) ++ (withEvents False)] (List.map2 (treeToSvg canvas assigned newWidth) newRoots [child1,child2]))
         Not child1 ->
             let
                 newRoots : List Position
                 newRoots = genStartPositions rootPos width 1
 
                 newWidth = width / toFloat 1
+
+
             in
-            List.concat (List.append [(withEvents False)] (List.map2 (treeToSvg canvas assigned newWidth) newRoots [child1]))
+            List.concat (List.append [(List.map (line rootPos) newRoots) ++ (withEvents False)] (List.map2 (treeToSvg canvas assigned newWidth) newRoots [child1])) 
         Var _ ->
             withEvents True
         Const _ ->
