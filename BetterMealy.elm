@@ -45,7 +45,7 @@ parse machine inputStr =
 
         charsAndOutput : List (Char, outputAlphabet)
         charsAndOutput =
-            List.map2 (Tuple.pair) chars (List.map (Tuple.second) (List.foldl (lambdaHat) [] chars))
+            List.map2 (Tuple.pair) chars (List.reverse (List.map (Tuple.second) (List.foldl (lambdaHat) [] chars)))
 
 
         charToString = (\(c, s) -> (String.fromChar c, s))
@@ -65,6 +65,6 @@ parse machine inputStr =
                         (s,o) :: init
 
     in
-    List.foldl (condensor) [] charsAndOutput
+    Debug.log (Debug.toString charsAndOutput)List.foldl (condensor) [] charsAndOutput
 
 

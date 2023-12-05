@@ -1,4 +1,4 @@
-module BooleanLexer exposing (lex)
+module BooleanLexer exposing (lex,machine)
 import BetterMealy as Mealy exposing (..)
 import Types exposing (..)
 
@@ -77,7 +77,7 @@ repeationFix list =
                 Or -> 
                     ls ++ List.repeat (String.length str) ("|",token)  
     in
-    List.foldl (helper) [] list
+    List.foldr (helper) [] list
 
 
 
