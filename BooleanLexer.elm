@@ -77,7 +77,7 @@ repeationFix list =
                 Or -> 
                     ls ++ List.repeat (String.length str) ("|",token)  
     in
-    List.foldr (helper) [] list
+    List.foldl (helper) [] list
 
 
 

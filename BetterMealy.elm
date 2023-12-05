@@ -65,6 +65,6 @@ parse machine inputStr =
                         (s,o) :: init
 
     in
-    Debug.log (Debug.toString charsAndOutput)List.foldl (condensor) [] charsAndOutput
+    Debug.log (Debug.toString charsAndOutput) List.reverse (List.foldl (condensor) [] charsAndOutput)
 
 
