@@ -21,7 +21,7 @@ name = "Max Musterman"
 
     I NEED THIS FOR THE WEBSITE TO WORK
 --}
-evalBooleanFormula : Dict String Bool -> BooleanFormula -> Bool
+evalBooleanFormula : Dict String Bool -> Formula -> Bool
 evalBooleanFormula values formula =
     False
 
@@ -35,7 +35,7 @@ should stop whenever some kind of error occurs within parseStep
 
     HELPER FUNCTION FOR PARSING
 --}
-parseBooleanFormula : List BoolToken -> List BooleanFormula -> (List BooleanFormula, Maybe String)
+parseBooleanFormula : List BoolToken -> List Formula -> (List Formula, Maybe String)
 parseBooleanFormula inputList initial =
     ([Var "This is a dummy"], Nothing)
 
@@ -52,7 +52,7 @@ Error that can happen :
     - Input Terminated : inputList == []
 
 --}
-parseStep : List (BoolToken) -> List (BooleanFormula) -> (List BoolToken, List BooleanFormula, Maybe String)  
+parseStep : List (BoolToken) -> List (Formula) -> (List BoolToken, List Formula, Maybe String)  
 parseStep inputList stack =
     (inputList, stack, Just "Nothing was done here")
 
@@ -78,7 +78,7 @@ createAllAssignments variables =
 
 
 {-- 
-Returns an alphabeticaly sorted List of variable name for all "Var" contained in a BooleanFormula
+Returns an alphabeticaly sorted List of variable name for all "Var" contained in a Formula
 Duplicates should only be listed **once**
 
 [Not (And (Var "c") (Or (Var "b") (Var "a")))]   ->   ["a","b","c"]
@@ -86,7 +86,7 @@ Duplicates should only be listed **once**
 
 ** sorting only serves to make the final table easier to read
 --}
-variablesInBoolFormula : BooleanFormula -> List String
+variablesInBoolFormula : Formula -> List String
 variablesInBoolFormula tree =
     []
 
@@ -102,6 +102,6 @@ Returns a list of variable names followed but a list of permutations and the res
 @see evalBooleanFormula - result
 
 --}
-computeTruthTable : BooleanFormula -> ( List String, List ( List Bool, Bool ) )
+computeTruthTable : Formula -> ( List String, List ( List Bool, Bool ) )
 computeTruthTable tree =
     ([], [])
